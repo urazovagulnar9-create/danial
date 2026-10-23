@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Замени этот заголовок</title>
+<title>График уравнения</title>
 <style>
-  :root { --bg: #fbfbfa; --fg: #1a1a18; --dim: #6b6b66; --line: #e4e4e0; }
+  :root { --bg: #fbfbfa; --fg: #1a1a18; --dim: #6b6b66; --line: #e4e4e0; --axis: #6b6b66; --plot: #2563eb; --err: #b42318; --err-bg: #fdecea; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #16161a; --fg: #f0f0ee; --dim: #9a9a95; --line: #2e2e34; }
+    :root { --bg: #16161a; --fg: #f0f0ee; --dim: #9a9a95; --line: #2e2e34; --axis: #9a9a95; --plot: #60a5fa; --err: #ff8a80; --err-bg: #3a1c1c; }
   }
   * { box-sizing: border-box; }
   body {
@@ -19,28 +19,173 @@
   h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 .75rem; }
   p { margin: 0 0 1rem; }
   .dim { color: var(--dim); }
-  .box { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-top: 28px; }
   code { background: var(--line); padding: .1em .35em; border-radius: 4px; font-size: .9em; }
+  form { display: flex; gap: 8px; }
+  input {
+    flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--fg);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  }
+  button {
+    padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer;
+    color: #fff; background: var(--plot); border: 0; border-radius: 8px;
+  }
+  .error {
+    margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+    color: var(--err); background: var(--err-bg);
+  }
+  .error:empty { display: none; }
+  canvas {
+    display: block; width: 100%; aspect-ratio: 1; margin-top: 16px;
+    border: 1px solid var(--line); border-radius: 10px;
+  }
 </style>
 </head>
 <body>
 <main>
 
-  <h1>Страница работает</h1>
+  <h1>График уравнения</h1>
 
-  <p>Если ты это читаешь в интернете, а не у себя на компьютере, — значит весь путь уже собран:
-  репозиторий есть, страница опубликована, ссылку можно кинуть другу.</p>
+  <p class="dim">Напиши уравнение и нажми «Построить». Умножение — <code>*</code>, степень — <code>^</code>.
+  Можно: <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>sqrt</code>, <code>abs</code>, <code>log</code>, <code>exp</code>, <code>pi</code>.</p>
 
-  <p class="dim">Это всё, что здесь должно быть. Содержимое придумаешь ты, а сделает ИИ.</p>
+  <form id="form">
+    <input id="equation" value="y = x*x" aria-label="Уравнение" autocomplete="off">
+    <button type="submit">Построить</button>
+  </form>
 
-  <div class="box">
-    <p><strong>Твой следующий ход.</strong></p>
-    <p>Открой <code>zadanie-1.md</code> и напиши, какую страницу ты хочешь — <strong>до того</strong>, как попросишь ИИ.
-    Потом попроси. Потом запусти <code>./check.sh</code>.</p>
-    <p class="dim">Проверка сейчас краснеет на заголовке этой страницы: он так и называется
-    «Замени этот заголовок». Это нарочно.</p>
-  </div>
+  <p id="error" class="error" role="alert"></p>
+
+  <canvas id="graph"></canvas>
 
 </main>
+
+<script>
+  // Видимая область: от -10 до 10 по обеим осям.
+  const MIN = -10, MAX = 10;
+
+  // Слова, которые можно писать в уравнении, и чем они станут в JavaScript.
+  const WORDS = {
+    x: "x", pi: "Math.PI",
+    sin: "Math.sin", cos: "Math.cos", tan: "Math.tan",
+    sqrt: "Math.sqrt", abs: "Math.abs", log: "Math.log", exp: "Math.exp"
+  };
+
+  // Превращает текст уравнения в функцию f(x). Если текст неправильный — бросает ошибку с понятным сообщением.
+  function makeFunction(text) {
+    let expr = text.trim().replace(/^y\s*=/i, "").trim();
+    if (expr === "") throw new Error("Уравнение пустое. Напиши, например: y = x*x");
+
+    if (/[^0-9a-z.+\-*/^()\s]/i.test(expr)) {
+      throw new Error("В уравнении есть непонятный знак. Можно использовать цифры, x, + - * / ^ и скобки.");
+    }
+
+    expr = expr.replace(/[a-z]+/gi, word => {
+      const js = WORDS[word.toLowerCase()];
+      if (!js) throw new Error("Непонятное слово «" + word + "». Можно: x, " + Object.keys(WORDS).slice(1).join(", ") + ".");
+      return js;
+    });
+
+    // Минус перед числом или x: -x^2 должно значить -(x^2).
+    expr = expr.replace(/(^|[(+\-*/])\s*-/g, "$1(-1)*");
+    expr = expr.replace(/\^/g, "**");
+
+    let f;
+    try {
+      f = new Function("x", "return " + expr + ";");
+      f(1);
+    } catch (e) {
+      throw new Error("Уравнение записано неправильно. Проверь знаки и скобки. Например: y = x*x");
+    }
+    return f;
+  }
+
+  const canvas = document.getElementById("graph");
+  const ctx = canvas.getContext("2d");
+
+  function draw(f) {
+    const size = canvas.clientWidth;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = size * ratio;
+    canvas.height = size * ratio;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+    const style = getComputedStyle(document.documentElement);
+    const color = name => style.getPropertyValue(name).trim();
+    const toPx = v => (v - MIN) / (MAX - MIN) * size;   // число -> пиксель по x
+    const toPy = v => size - toPx(v);                    // число -> пиксель по y (вверх)
+
+    ctx.clearRect(0, 0, size, size);
+
+    // Сетка через каждую единицу.
+    ctx.strokeStyle = color("--line");
+    ctx.lineWidth = 1;
+    for (let i = MIN; i <= MAX; i++) {
+      ctx.beginPath();
+      ctx.moveTo(toPx(i), 0); ctx.lineTo(toPx(i), size);
+      ctx.moveTo(0, toPy(i)); ctx.lineTo(size, toPy(i));
+      ctx.stroke();
+    }
+
+    // Оси x и y.
+    ctx.strokeStyle = color("--axis");
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, toPy(0)); ctx.lineTo(size, toPy(0));
+    ctx.moveTo(toPx(0), 0); ctx.lineTo(toPx(0), size);
+    ctx.stroke();
+
+    // Числа на осях через каждые 2 единицы и названия осей.
+    ctx.fillStyle = color("--dim");
+    ctx.font = "12px system-ui, sans-serif";
+    for (let i = MIN + 2; i < MAX; i += 2) {
+      if (i === 0) continue;
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      ctx.fillText(i, toPx(i), toPy(0) + 4);
+      ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      ctx.fillText(i, toPx(0) - 4, toPy(i));
+    }
+    ctx.textAlign = "right"; ctx.textBaseline = "top";
+    ctx.fillText("0", toPx(0) - 4, toPy(0) + 4);
+    ctx.font = "bold 14px system-ui, sans-serif";
+    ctx.fillText("x", size - 6, toPy(0) + 4);
+    ctx.textAlign = "left";
+    ctx.fillText("y", toPx(0) + 6, 4);
+
+    if (!f) return;
+
+    // Сам график: считаем y для каждого пикселя по горизонтали.
+    ctx.strokeStyle = color("--plot");
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    let penDown = false;
+    for (let px = 0; px <= size; px++) {
+      const x = MIN + px / size * (MAX - MIN);
+      const y = f(x);
+      if (!Number.isFinite(y) || Math.abs(y) > 1000) { penDown = false; continue; }
+      if (penDown) ctx.lineTo(px, toPy(y)); else ctx.moveTo(px, toPy(y));
+      penDown = true;
+    }
+    ctx.stroke();
+  }
+
+  const input = document.getElementById("equation");
+  const errorBox = document.getElementById("error");
+  let current = null;
+
+  document.getElementById("form").addEventListener("submit", event => {
+    event.preventDefault();
+    try {
+      current = makeFunction(input.value);
+      errorBox.textContent = "";
+    } catch (e) {
+      current = null;
+      errorBox.textContent = e.message;
+    }
+    draw(current);
+  });
+
+  window.addEventListener("resize", () => draw(current));
+  draw(null);
+</script>
 </body>
 </html>
