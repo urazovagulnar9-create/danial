@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Генератор паролей</title>
+<style>
+  :root { --bg: #fbfbfa; --fg: #1a1a18; --dim: #6b6b66; --line: #e4e4e0; --accent: #2563eb; --ok: #067647; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16161a; --fg: #f0f0ee; --dim: #9a9a95; --line: #2e2e34; --accent: #60a5fa; --ok: #6ce9a6; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 16px; background: var(--bg); color: var(--fg);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center;
+  }
+  main { max-width: 34rem; width: 100%; }
+  h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 .75rem; }
+  p { margin: 0 0 1rem; }
+  .dim { color: var(--dim); }
+  button {
+    padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer;
+    color: #fff; background: var(--accent); border: 0; border-radius: 8px;
+  }
+  .result {
+    margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+  }
+  .result[hidden] { display: none; }
+  .password {
+    flex: 1; min-width: 0; font: 1.25rem/1.4 ui-monospace, Menlo, Consolas, monospace;
+    overflow-wrap: anywhere;
+  }
+  .copied { margin: 8px 0 0; color: var(--ok); font-weight: 600; }
+  .copied:empty { display: none; }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Генератор паролей</h1>
+
+  <p class="dim">Нажми «Сгенерировать» — получишь пароль из 16 символов: заглавные и строчные буквы, цифры и спецсимволы.</p>
+
+  <button id="generate" type="button">Сгенерировать</button>
+
+  <div id="result" class="result" hidden>
+    <span id="password" class="password"></span>
+    <button id="copy" type="button">Копировать</button>
+  </div>
+
+  <p id="copied" class="copied" role="status"></p>
+
+</main>
+<script>
+  const LENGTH = 16;
+  const UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const LOWER = 'abcdefghijklmnopqrstuvwxyz';
+  const DIGITS = '0123456789';
+  const SYMBOLS = '!@#$%^&*-_=+?';
+  const ALL = UPPER + LOWER + DIGITS + SYMBOLS;
+
+  const generateButton = document.getElementById('generate');
+  const copyButton = document.getElementById('copy');
+  const resultBox = document.getElementById('result');
+  const passwordBox = document.getElementById('password');
+  const copiedBox = document.getElementById('copied');
+
+  // Случайное целое от 0 до max-1. crypto надёжнее, чем Math.random
+  function randomIndex(max) {
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    return array[0] % max;
+  }
+
+  function randomChar(chars) {
+    return chars[randomIndex(chars.length)];
+  }
+
+  function makePassword() {
+    // По одному символу каждого вида — так они точно будут в пароле
+    const chars = [randomChar(UPPER), randomChar(LOWER), randomChar(DIGITS), randomChar(SYMBOLS)];
+    while (chars.length < LENGTH) {
+      chars.push(randomChar(ALL));
+    }
+    // Перемешиваем, чтобы первые четыре символа не стояли всегда в одном порядке
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = randomIndex(i + 1);
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join('');
+  }
+
+  generateButton.addEventListener('click', () => {
+    let password = makePassword();
+    // Новый пароль не должен совпасть с тем, что уже на экране
+    while (password === passwordBox.textContent) {
+      password = makePassword();
+    }
+    passwordBox.textContent = password;
+    resultBox.hidden = false;
+    copiedBox.textContent = '';
+  });
+
+  copyButton.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(passwordBox.textContent);
+      copiedBox.textContent = 'Скопировано';
+    } catch {
+      copiedBox.textContent = 'Не получилось скопировать — выдели пароль и нажми Ctrl+C';
+    }
+  });
+</script>
+</body>
+</html>
