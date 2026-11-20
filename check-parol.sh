@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Проверка parol.html по трём предикатам из zadanie-4.md.
+# Проверка parol.html по трём предикатам из zadanie-4.md (1-3)
+# и трём предикатам из zadanie-5.md (4-6).
 #
 #     ./check-parol.sh
 #
@@ -11,6 +12,8 @@
 #   - работает ли кнопка: JavaScript не запускается, никто ничего не нажимает;
 #   - появляется ли пароль, какой он длины и надёжный ли он;
 #   - копирует ли кнопка «Копировать» на самом деле и пишется ли «Скопировано»;
+#   - двигается ли ползунок, меняется ли число в id="length-value" и
+#     становится ли пароль той длины, что выбрана на ползунке;
 #   - видны ли элементы на экране (их могут спрятать через CSS или hidden);
 #   - не стоит ли тег внутри HTML-комментария <!-- ... --> - тогда в браузере
 #     его нет, а проверка скажет ДА;
@@ -38,10 +41,23 @@ has_id() {
   grep -qiE "<[a-z][a-z0-9]*[[:space:]][^>]*id=[\"']$1[\"']" "$PAGE"
 }
 
+# Весь первый тег $1 с id="$2" целиком, чтобы смотреть его атрибуты.
+get_tag() {
+  grep -oiE "<$1[[:space:]][^>]*id=[\"']$2[\"'][^>]*>" "$PAGE" | head -n 1
+}
+
+# Есть ли в теге $1 атрибут $2="$3".
+tag_has_attr() {
+  echo "$1" | grep -qiE "[[:space:]]$2=[\"']$3[\"']"
+}
+
 if [ ! -f "$PAGE" ]; then
   bad "1. кнопка id=\"generate\": файла $PAGE нет"
   bad "2. элемент id=\"password\": файла $PAGE нет"
   bad "3. кнопка id=\"copy\" и элемент id=\"copied\": файла $PAGE нет"
+  bad "4. ползунок id=\"length\": файла $PAGE нет"
+  bad "5. элемент id=\"length-value\": файла $PAGE нет"
+  bad "6. у ползунка min=\"8\" и max=\"32\": файла $PAGE нет"
 else
   # 1. Есть кнопка с id="generate"
   if has_tag button generate; then
@@ -68,6 +84,38 @@ else
     bad "3. кнопка id=\"copy\" и элемент id=\"copied\": нет тега <button id=\"copy\">"
   else
     bad "3. кнопка id=\"copy\" и элемент id=\"copied\": нет тега с id=\"copied\""
+  fi
+
+  # 4. Есть ползунок с id="length" (тег <input type="range">)
+  SLIDER=$(get_tag input length)
+  if [ -n "$SLIDER" ] && tag_has_attr "$SLIDER" type range; then
+    ok "4. ползунок id=\"length\": найден тег <input type=\"range\" id=\"length\">"
+  elif [ -n "$SLIDER" ]; then
+    bad "4. ползунок id=\"length\": <input id=\"length\"> есть, но без type=\"range\""
+  elif has_id length; then
+    bad "4. ползунок id=\"length\": id есть, но стоит не на <input>"
+  else
+    bad "4. ползунок id=\"length\": в $PAGE нет тега с таким id"
+  fi
+
+  # 5. Есть элемент с id="length-value" для выбранной длины
+  if has_id length-value; then
+    ok "5. элемент id=\"length-value\": найден тег с id=\"length-value\""
+  else
+    bad "5. элемент id=\"length-value\": в $PAGE нет тега с таким id"
+  fi
+
+  # 6. У ползунка id="length" есть min="8" и max="32"
+  if [ -z "$SLIDER" ]; then
+    bad "6. у ползунка min=\"8\" и max=\"32\": нет тега <input id=\"length\">"
+  elif tag_has_attr "$SLIDER" min 8 && tag_has_attr "$SLIDER" max 32; then
+    ok "6. у ползунка min=\"8\" и max=\"32\": оба атрибута найдены"
+  elif ! tag_has_attr "$SLIDER" min 8 && ! tag_has_attr "$SLIDER" max 32; then
+    bad "6. у ползунка min=\"8\" и max=\"32\": нет ни min=\"8\", ни max=\"32\""
+  elif ! tag_has_attr "$SLIDER" min 8; then
+    bad "6. у ползунка min=\"8\" и max=\"32\": нет min=\"8\""
+  else
+    bad "6. у ползунка min=\"8\" и max=\"32\": нет max=\"32\""
   fi
 fi
 
