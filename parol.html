@@ -32,6 +32,8 @@
     flex: 1; min-width: 0; font: 1.25rem/1.4 ui-monospace, Menlo, Consolas, monospace;
     overflow-wrap: anywhere;
   }
+  .length { margin: 0 0 1rem; display: flex; align-items: center; gap: 10px; }
+  .length input { flex: 1; accent-color: var(--accent); }
   .copied { margin: 8px 0 0; color: var(--ok); font-weight: 600; }
   .copied:empty { display: none; }
 </style>
@@ -41,7 +43,13 @@
 
   <h1>Генератор паролей</h1>
 
-  <p class="dim">Нажми «Сгенерировать» — получишь пароль из 16 символов: заглавные и строчные буквы, цифры и спецсимволы.</p>
+  <p class="dim">Нажми «Сгенерировать» — получишь пароль выбранной длины: заглавные и строчные буквы, цифры и спецсимволы.</p>
+
+  <p class="length">
+    <label for="length">Длина:</label>
+    <input id="length" type="range" min="8" max="32" value="16">
+    <output id="length-value" for="length">16</output>
+  </p>
 
   <button id="generate" type="button">Сгенерировать</button>
 
@@ -54,7 +62,6 @@
 
 </main>
 <script>
-  const LENGTH = 16;
   const UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const LOWER = 'abcdefghijklmnopqrstuvwxyz';
   const DIGITS = '0123456789';
@@ -66,6 +73,8 @@
   const resultBox = document.getElementById('result');
   const passwordBox = document.getElementById('password');
   const copiedBox = document.getElementById('copied');
+  const lengthSlider = document.getElementById('length');
+  const lengthValue = document.getElementById('length-value');
 
   // Случайное целое от 0 до max-1. crypto надёжнее, чем Math.random
   function randomIndex(max) {
@@ -78,10 +87,10 @@
     return chars[randomIndex(chars.length)];
   }
 
-  function makePassword() {
+  function makePassword(length) {
     // По одному символу каждого вида — так они точно будут в пароле
     const chars = [randomChar(UPPER), randomChar(LOWER), randomChar(DIGITS), randomChar(SYMBOLS)];
-    while (chars.length < LENGTH) {
+    while (chars.length < length) {
       chars.push(randomChar(ALL));
     }
     // Перемешиваем, чтобы первые четыре символа не стояли всегда в одном порядке
@@ -93,14 +102,19 @@
   }
 
   generateButton.addEventListener('click', () => {
-    let password = makePassword();
+    let password = makePassword(Number(lengthSlider.value));
     // Новый пароль не должен совпасть с тем, что уже на экране
     while (password === passwordBox.textContent) {
-      password = makePassword();
+      password = makePassword(Number(lengthSlider.value));
     }
     passwordBox.textContent = password;
     resultBox.hidden = false;
     copiedBox.textContent = '';
+  });
+
+  // Число рядом с ползунком показывает выбранную длину
+  lengthSlider.addEventListener('input', () => {
+    lengthValue.textContent = lengthSlider.value;
   });
 
   copyButton.addEventListener('click', async () => {
